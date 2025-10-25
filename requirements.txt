@@ -1,0 +1,22 @@
+# === GreenEco Project Dependencies ===
+# Core camera & image handling
+opencv-python-headless
+numpy
+
+# Environmental sensors (DFRobot SEN0501)
+modbus-tk
+smbus2
+
+# Soil sensor (ES-Soil7)
+minimalmodbus
+pyserial
+
+# Adafruit / I2C sensors (nếu có)
+adafruit-circuitpython-bme280
+adafruit-circuitpython-bh1750
+adafruit-circuitpython-tsl2591
+adafruit-circuitpython-ads1x15
+
+# Misc system utilities
+requests
+psutil

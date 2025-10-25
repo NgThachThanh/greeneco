@@ -1,0 +1,25 @@
+{
+  "ts": "2025-10-24T10:46:03",
+  "device_id": "pi-greenco-01",
+  "env": {
+    "temp_c": 27.14,
+    "rh_pct": 61.52496337890625,
+    "pressure_hpa": 1007.0,
+    "lux": 275.34,
+    "uv_mw_cm2": -7.77,
+    "alt_m": 66.7
+  },
+  "co2": {
+    "ppm": 735
+  },
+  "soil": {
+    "temp_c": 27.1,
+    "hum_pct": 0.0,
+    "ec_uS_cm": 0.0,
+    "ph": 3.0,
+    "n_mgkg": 0.0,
+    "p_mgkg": 0.0,
+    "k_mgkg": 0.0,
+    "salt_mgL": 0.0
+  }
+}

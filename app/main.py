@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+import time, csv, os, sys
+from datetime import datetime
+from app.config import load_config
+from app.camera_preview import run as run_cam
+from app.sen0501_i2c import Sen0501
+from app.sen0220_uart import Sen0220
+from app.es_soil7 import ESSoil7
+from app.dashboard import run as run_dashboard
+from app.json_export import collect_all, write_json, append_jsonl
+from datetime import datetime
+import json, os
+
+def read_once_0501(cfg):
+    s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
+    print(s.read())
+
+def stream_co2(cfg):
+    s = Sen0220(port=cfg["sen0220"]["port"], baud=cfg["sen0220"]["baud"])
+    hz = max(1, int(cfg["sen0220"].get("read_hz", 1)))
+    dt = 1.0 / hz
+    while True:
+        print(s.read())
+        time.sleep(dt)
+
+def read_once_soil(cfg):
+    soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
+                   baud=cfg["soil7"]["baud"], timeout=cfg["soil7"]["timeout"],
+                   inter_byte_timeout=cfg["soil7"]["inter_byte_timeout"])
+    print(soil.read())
+
+def log_soil(cfg):
+    soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
+                   baud=cfg["soil7"]["baud"], timeout=cfg["soil7"]["timeout"],
+                   inter_byte_timeout=cfg["soil7"]["inter_byte_timeout"])
+    path = cfg["soil7"]["csv_path"]
+    hz = max(1, int(cfg["soil7"].get("read_hz", 1)))
+    dt = 1.0 / hz
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    new = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["ts","temp_C","hum_%","ec_uS_cm","pH","N_mgkg","P_mgkg","K_mgkg","salt_mgL"])
+        while True:
+            try:
+                d = soil.read()
+                ts = datetime.now().isoformat(timespec="seconds")
+                w.writerow([ts, d["temp_C"], d["hum_%"], d["ec_uS_cm"], d["pH"],
+                            d["N_mgkg"], d["P_mgkg"], d["K_mgkg"], d["salt_mgL"]])
+                f.flush()
+                print(ts, d)
+            except Exception as e:
+                print("Soil read error:", e, file=sys.stderr)
+            time.sleep(dt)
+
+def combined_log_all(cfg):
+    s1 = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
+    s2 = Sen0220(port=cfg["sen0220"]["port"], baud=cfg["sen0220"]["baud"])
+    soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
+                   baud=cfg["soil7"]["baud"], timeout=cfg["soil7"]["timeout"],
+                   inter_byte_timeout=cfg["soil7"]["inter_byte_timeout"])
+    path = cfg["logging"]["output"]
+    hz = max(1, int(cfg["logging"].get("interval_hz", 1)))
+    dt = 1.0 / hz
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    new = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["ts","temp_c","rh_pct","lux","uv_mw_cm2","hpa","alt_m",
+                        "co2_ppm",
+                        "soil_temp_C","soil_hum_%","soil_ec_uS_cm","soil_pH","soil_N","soil_P","soil_K","soil_salt_mgL"])
+        while True:
+            try:
+                a = s1.read()
+                b = s2.read()
+                c = soil.read()
+                ts = datetime.now().isoformat(timespec="seconds")
+                row = [ts, a["temp_c"], a["rh_pct"], a["lux"], a["uv_mw_cm2"], a["hpa"], a["alt_m"],
+                       b["co2_ppm"],
+                       c["temp_C"], c["hum_%"], c["ec_uS_cm"], c["pH"], c["N_mgkg"], c["P_mgkg"], c["K_mgkg"], c["salt_mgL"]]
+                print(row)
+                w.writerow(row); f.flush()
+            except Exception as e:
+                print("Combined read error:", e, file=sys.stderr)
+            time.sleep(dt)
+
+def export_json_once(cfg):
+    data = collect_all(cfg)
+    path = cfg["export"]["json_path"]
+    write_json(path, data)
+    print(f"Đã ghi snapshot JSON vào: {path}")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+def stream_jsonl(cfg):
+    path = cfg["export"]["jsonl_path"]
+    hz = max(1, int(cfg["logging"].get("interval_hz", 1)))
+    dt = 1.0 / hz
+    print(f"Ghi JSONL liên tục vào: {path} @ {hz} Hz. Ctrl+C để dừng.")
+    try:
+        while True:
+            data = collect_all(cfg)
+            append_jsonl(path, data)
+            # in gọn cho biết sống
+            print(data["ts"], "ENV.T=", data["env"]["temp_c"], "CO2=", data["co2"]["ppm"],
+                  "SOIL.pH=", None if data["soil"] is None else data["soil"]["ph"])
+            time.sleep(dt)
+    except KeyboardInterrupt:
+        pass
+
+def main_menu():
+    cfg = load_config("config/settings.yml")
+    while True:
+        print("\n=== GreenEco Menu ===")
+        print("1) Camera preview")
+        print("2) Đọc SEN0501 1 lần")
+        print("3) Stream CO2 SEN0220")
+        print("4) Ghi log tổng hợp (ENV + CO2 + SOIL)")
+        print("5) Live dashboard (realtime)")
+        print("6) Đọc Soil 7-in-1 1 lần")
+        print("7) Ghi log Soil 7-in-1")
+        print("8) Thoát")
+        print("9) Xuất 1 file JSON (snapshot)")
+        print("10) Ghi JSONL liên tục (để upload)")
+
+        choice = input("Chọn: ").strip()
+        if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
+        elif choice == "2": read_once_0501(cfg)
+        elif choice == "3": stream_co2(cfg)
+        elif choice == "4": combined_log_all(cfg)
+        elif choice == "5": run_dashboard(cfg)
+        elif choice == "6": read_once_soil(cfg)
+        elif choice == "7": log_soil(cfg)
+        elif choice == "8": break
+        elif choice == "9": export_json_once(cfg)
+        elif choice == "10": stream_jsonl(cfg)
+        else:
+            print("Lựa chọn không hợp lệ.")
+
+if __name__ == "__main__":
+    main_menu()

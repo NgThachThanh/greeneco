@@ -1,0 +1,31 @@
+camera:
+  resolution: [1280, 720]
+
+sen0501:
+  i2c_bus: 1
+  address: 0x22
+  read_hz: 1
+
+sen0220:
+  port: "/dev/ttyAMA0"
+  baud: 9600
+  read_hz: 1
+
+soil7:
+  port: "/dev/ttyUSB0"   # dùng "/dev/serial0" nếu chạy qua UART + transceiver RS485
+  slave: 1
+  baud: 9600
+  timeout: 2.0
+  inter_byte_timeout: 0.15
+  read_hz: 1
+  csv_path: "logs/soil_log.csv"
+
+logging:
+  output: "logs/all_sensors.csv"   # file tổng hợp
+  interval_hz: 1
+
+device_id: "pi-greenco-01"   # tuỳ bạn, để null cũng được
+
+export:
+  json_path: "outbox/greeneco_snapshot.json"   # file chụp 1 lần
+  jsonl_path: "outbox/greeneco_stream.jsonl"   # file ghi liên tục (mỗi dòng 1 bản ghi)
