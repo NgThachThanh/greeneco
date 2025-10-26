@@ -10,6 +10,8 @@ from app.dashboard import run as run_dashboard
 from app.json_export import collect_all, write_json, append_jsonl
 from datetime import datetime
 import json, os
+from app.uploader import post_file
+from app.config import load_config
 
 def read_once_0501(cfg):
     s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
@@ -109,6 +111,29 @@ def stream_jsonl(cfg):
     except KeyboardInterrupt:
         pass
 
+def upload_snapshot(cfg=None):
+    """
+    Gửi file snapshot JSON nội bộ lên server coworker.
+    Ưu tiên lấy đường dẫn từ cfg['export']['json_path'], nếu không có thì fallback 'outbox/greeneco_snapshot.json'.
+    """
+    # Lấy path từ config nếu có
+    json_path = None
+    try:
+        if cfg and "export" in cfg and "json_path" in cfg["export"]:
+            json_path = cfg["export"]["json_path"]
+    except Exception:
+        pass
+
+    if not json_path:
+        json_path = "outbox/greeneco_snapshot.json"
+
+    print(f"[Uploader] Đang gửi: {json_path}")
+    try:
+        code, text = post_file(json_path, timeout=15)
+        print(f"[Uploader] POST OK: {code} — {text}")
+    except Exception as e:
+        print(f"[Uploader] LỖI POST: {e}")
+
 def main_menu():
     cfg = load_config("config/settings.yml")
     while True:
@@ -123,6 +148,7 @@ def main_menu():
         print("8) Thoát")
         print("9) Xuất 1 file JSON (snapshot)")
         print("10) Ghi JSONL liên tục (để upload)")
+        print("11) Gửi snapshot lên server")
 
         choice = input("Chọn: ").strip()
         if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
@@ -135,6 +161,7 @@ def main_menu():
         elif choice == "8": break
         elif choice == "9": export_json_once(cfg)
         elif choice == "10": stream_jsonl(cfg)
+        elif choice == "11": upload_snapshot()
         else:
             print("Lựa chọn không hợp lệ.")
 

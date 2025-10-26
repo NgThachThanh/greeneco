@@ -20,3 +20,4 @@ adafruit-circuitpython-ads1x15
 # Misc system utilities
 requests
 psutil
+python-dateutil
