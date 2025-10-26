@@ -111,6 +111,62 @@ def stream_jsonl(cfg):
     except KeyboardInterrupt:
         pass
 
+def servo_menu(cfg=None):
+    """Menu điều khiển servo cửa: mở/đóng/giữa/đặt góc.
+    Import chậm để tránh side-effect trên máy không có GPIO.
+    """
+    try:
+        from app import servo as door_servo
+    except Exception as e:
+        print("Không thể import servo module:", e)
+        return
+
+    while True:
+        print("\n=== Servo Control ===")
+        print("1) Mở cửa (open_door, +angle)")
+        print("2) Đóng cửa (close_door, -angle)")
+        print("3) Về giữa (vent_mid)")
+        print("4) Đặt góc tùy ý (-90..90)")
+        print("5) Thoát menu servo")
+        ch = input("Chọn: ").strip()
+        if ch == "1":
+            try:
+                door_servo.open_door()
+                print("Đã mở cửa (mặc định +80°)")
+            except Exception as e:
+                print("Lỗi open_door:", e)
+        elif ch == "2":
+            try:
+                door_servo.close_door()
+                print("Đã đóng cửa (mặc định -80°)")
+            except Exception as e:
+                print("Lỗi close_door:", e)
+        elif ch == "3":
+            try:
+                door_servo.vent_mid()
+                print("Đã đưa về giữa (0°)")
+            except Exception as e:
+                print("Lỗi vent_mid:", e)
+        elif ch == "4":
+            try:
+                s = input("Nhập góc (-90..90): ").strip()
+                angle = float(s)
+                if angle < -90: angle = -90
+                if angle > 90: angle = 90
+                door_servo.servo.angle = angle
+                time.sleep(0.6)
+                try:
+                    door_servo.servo.detach()
+                except Exception:
+                    pass
+                print(f"Đã đặt góc {angle}°")
+            except Exception as e:
+                print("Lỗi đặt góc:", e)
+        elif ch == "5":
+            break
+        else:
+            print("Lựa chọn không hợp lệ.")
+
 def upload_snapshot(cfg=None):
     """
     Gửi file snapshot JSON nội bộ lên server coworker.
@@ -149,6 +205,7 @@ def main_menu():
         print("9) Xuất 1 file JSON (snapshot)")
         print("10) Ghi JSONL liên tục (để upload)")
         print("11) Gửi snapshot lên server")
+        print("12) Điều khiển Servo (mở/đóng/giữa/góc)")
 
         choice = input("Chọn: ").strip()
         if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
@@ -162,6 +219,7 @@ def main_menu():
         elif choice == "9": export_json_once(cfg)
         elif choice == "10": stream_jsonl(cfg)
         elif choice == "11": upload_snapshot()
+        elif choice == "12": servo_menu(cfg)
         else:
             print("Lựa chọn không hợp lệ.")
 
