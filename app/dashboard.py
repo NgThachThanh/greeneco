@@ -1,5 +1,6 @@
 # app/dashboard.py
 import time, shutil, math, sys
+import select as _select
 from app.sen0501_i2c import Sen0501
 from app.sen0220_uart import Sen0220
 from app.es_soil7 import ESSoil7
@@ -74,8 +75,20 @@ def run(cfg):
     hz = max(1, int(cfg["sen0501"].get("read_hz", 1)))
     dt = 1.0 / hz
 
-    print("Realtime dashboard. Ctrl+C để thoát.")
+    print("Realtime dashboard. Nhấn q để thoát (hoặc Ctrl+C).")
     time.sleep(0.3)
+
+    # Thiết lập đọc phím không chặn nếu có TTY
+    kb_enabled = False
+    fd = None; _termios = None; _tty = None; old_attr = None
+    try:
+        import termios as _termios, tty as _tty
+        fd = sys.stdin.fileno()
+        old_attr = _termios.tcgetattr(fd)
+        _tty.setcbreak(fd)
+        kb_enabled = True
+    except Exception:
+        kb_enabled = False
 
     try:
         warn_once = False
@@ -107,6 +120,23 @@ def run(cfg):
                 sys.stdout.write("\n".join(env_lines) + "\n\n")
                 sys.stdout.write("\n".join(soil_lines) + "\n")
             sys.stdout.flush()
+
+            # Kiểm tra phím 'q' để thoát
+            if kb_enabled:
+                try:
+                    if _select.select([sys.stdin], [], [], 0)[0]:
+                        ch = sys.stdin.read(1)
+                        if ch and ch.lower() == 'q':
+                            break
+                except Exception:
+                    pass
             time.sleep(dt)
     except KeyboardInterrupt:
         pass
+    finally:
+        # Khôi phục chế độ terminal nếu đã bật cbreak
+        try:
+            if kb_enabled and old_attr is not None:
+                _termios.tcsetattr(fd, _termios.TCSADRAIN, old_attr)
+        except Exception:
+            pass

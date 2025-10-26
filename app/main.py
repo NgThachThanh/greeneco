@@ -21,9 +21,42 @@ def stream_co2(cfg):
     s = Sen0220(port=cfg["sen0220"]["port"], baud=cfg["sen0220"]["baud"])
     hz = max(1, int(cfg["sen0220"].get("read_hz", 1)))
     dt = 1.0 / hz
-    while True:
-        print(s.read())
-        time.sleep(dt)
+    print("Streaming CO2. Nhấn q để dừng (hoặc Ctrl+C).")
+    fd = None; old_attr = None; kb_enabled = False
+    try:
+        # Thiết lập đọc phím không chặn trên Linux/TTY
+        import sys as _sys
+        import select as _select
+        try:
+            import termios as _termios, tty as _tty
+            fd = _sys.stdin.fileno()
+            old_attr = _termios.tcgetattr(fd)
+            _tty.setcbreak(fd)
+            kb_enabled = True
+        except Exception:
+            kb_enabled = False
+
+        while True:
+            # Kiểm tra phím 'q' để thoát
+            if kb_enabled:
+                try:
+                    if _select.select([_sys.stdin], [], [], 0)[0]:
+                        ch = _sys.stdin.read(1)
+                        if ch and ch.lower() == 'q':
+                            break
+                except Exception:
+                    pass
+            print(s.read())
+            time.sleep(dt)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Khôi phục chế độ terminal
+        try:
+            if kb_enabled and old_attr is not None:
+                _termios.tcsetattr(fd, _termios.TCSADRAIN, old_attr)
+        except Exception:
+            pass
 
 def read_once_soil(cfg):
     soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
@@ -99,9 +132,32 @@ def stream_jsonl(cfg):
     path = cfg["export"]["jsonl_path"]
     hz = max(1, int(cfg["logging"].get("interval_hz", 1)))
     dt = 1.0 / hz
-    print(f"Ghi JSONL liên tục vào: {path} @ {hz} Hz. Ctrl+C để dừng.")
+    print(f"Ghi JSONL liên tục vào: {path} @ {hz} Hz. Nhấn q để dừng (hoặc Ctrl+C).")
+    fd = None; old_attr = None; kb_enabled = False
     try:
+        # Thiết lập đọc phím không chặn trên Linux/TTY
+        import sys as _sys
+        import select as _select
+        try:
+            import termios as _termios, tty as _tty
+            fd = _sys.stdin.fileno()
+            old_attr = _termios.tcgetattr(fd)
+            _tty.setcbreak(fd)
+            kb_enabled = True
+        except Exception:
+            kb_enabled = False
+
         while True:
+            # Kiểm tra phím 'q' để thoát
+            if kb_enabled:
+                try:
+                    if _select.select([_sys.stdin], [], [], 0)[0]:
+                        ch = _sys.stdin.read(1)
+                        if ch and ch.lower() == 'q':
+                            break
+                except Exception:
+                    pass
+
             data = collect_all(cfg)
             append_jsonl(path, data)
             # in gọn cho biết sống
@@ -110,6 +166,13 @@ def stream_jsonl(cfg):
             time.sleep(dt)
     except KeyboardInterrupt:
         pass
+    finally:
+        # Khôi phục chế độ terminal
+        try:
+            if kb_enabled and old_attr is not None:
+                _termios.tcsetattr(fd, _termios.TCSADRAIN, old_attr)
+        except Exception:
+            pass
 
 def servo_menu(cfg=None):
     """Menu điều khiển servo cửa: mở/đóng/giữa/đặt góc.
