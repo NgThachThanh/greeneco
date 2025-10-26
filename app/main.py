@@ -98,28 +98,64 @@ def combined_log_all(cfg):
     path = cfg["logging"]["output"]
     hz = max(1, int(cfg["logging"].get("interval_hz", 1)))
     dt = 1.0 / hz
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    new = not os.path.exists(path)
-    with open(path, "a", newline="") as f:
-        w = csv.writer(f)
-        if new:
-            w.writerow(["ts","temp_c","rh_pct","lux","uv_mw_cm2","hpa","alt_m",
-                        "co2_ppm",
-                        "soil_temp_C","soil_hum_%","soil_ec_uS_cm","soil_pH","soil_N","soil_P","soil_K","soil_salt_mgL"])
-        while True:
+    print(f"Ghi log tổng hợp vào: {path} @ {hz} Hz. Nhấn q để dừng (hoặc Ctrl+C).")
+
+    # Thiết lập đọc phím không chặn nếu có TTY
+    fd = None; old_attr = None; kb_enabled = False
+    try:
+        import sys as _sys
+        import select as _select
+        try:
+            import termios as _termios, tty as _tty
+            fd = _sys.stdin.fileno()
+            old_attr = _termios.tcgetattr(fd)
+            _tty.setcbreak(fd)
+            kb_enabled = True
+        except Exception:
+            kb_enabled = False
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        new = not os.path.exists(path)
+        with open(path, "a", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["ts","temp_c","rh_pct","lux","uv_mw_cm2","hpa","alt_m",
+                            "co2_ppm",
+                            "soil_temp_C","soil_hum_%","soil_ec_uS_cm","soil_pH","soil_N","soil_P","soil_K","soil_salt_mgL"])
             try:
-                a = s1.read()
-                b = s2.read()
-                c = soil.read()
-                ts = datetime.now().isoformat(timespec="seconds")
-                row = [ts, a["temp_c"], a["rh_pct"], a["lux"], a["uv_mw_cm2"], a["hpa"], a["alt_m"],
-                       b["co2_ppm"],
-                       c["temp_C"], c["hum_%"], c["ec_uS_cm"], c["pH"], c["N_mgkg"], c["P_mgkg"], c["K_mgkg"], c["salt_mgL"]]
-                print(row)
-                w.writerow(row); f.flush()
-            except Exception as e:
-                print("Combined read error:", e, file=sys.stderr)
-            time.sleep(dt)
+                while True:
+                    # Kiểm tra phím 'q' để thoát
+                    if kb_enabled:
+                        try:
+                            if _select.select([_sys.stdin], [], [], 0)[0]:
+                                ch = _sys.stdin.read(1)
+                                if ch and ch.lower() == 'q':
+                                    break
+                        except Exception:
+                            pass
+
+                    try:
+                        a = s1.read()
+                        b = s2.read()
+                        c = soil.read()
+                        ts = datetime.now().isoformat(timespec="seconds")
+                        row = [ts, a["temp_c"], a["rh_pct"], a["lux"], a["uv_mw_cm2"], a["hpa"], a["alt_m"],
+                               b["co2_ppm"],
+                               c["temp_C"], c["hum_%"], c["ec_uS_cm"], c["pH"], c["N_mgkg"], c["P_mgkg"], c["K_mgkg"], c["salt_mgL"]]
+                        print(row)
+                        w.writerow(row); f.flush()
+                    except Exception as e:
+                        print("Combined read error:", e, file=sys.stderr)
+                    time.sleep(dt)
+            except KeyboardInterrupt:
+                pass
+    finally:
+        # Khôi phục chế độ terminal
+        try:
+            if kb_enabled and old_attr is not None:
+                _termios.tcsetattr(fd, _termios.TCSADRAIN, old_attr)
+        except Exception:
+            pass
 
 def export_json_once(cfg):
     data = collect_all(cfg)
