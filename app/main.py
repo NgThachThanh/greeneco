@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import time, csv, os, sys
+import time, csv, os, sys, json
 from datetime import datetime
 from app.config import load_config
 from app.camera_preview import run as run_cam
@@ -8,14 +8,17 @@ from app.sen0220_uart import Sen0220
 from app.es_soil7 import ESSoil7
 from app.dashboard import run as run_dashboard
 from app.json_export import collect_all, write_json, append_jsonl
-from datetime import datetime
-import json, os
 from app.uploader import post_file
-from app.config import load_config
-import os
-from datetime import datetime
 from app.cam_capture_cli import capture_jpeg_cli
 from app.uploader_greenimage import upload_green_image
+
+# Cấu hình cho upload ảnh lên Render
+IMAGE_UPLOAD_CFG = {
+    "api_base": "https://h2-api-z7sq.onrender.com",
+    "device_id": "CAM-01",
+    "img_dir": os.path.expanduser("~/greeneco_out/images"),
+    "auth_token": None,  # nếu server yêu cầu thì nhét vào
+}
 
 def read_once_0501(cfg):
     s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
@@ -270,6 +273,28 @@ def servo_menu(cfg=None):
         else:
             print("Lựa chọn không hợp lệ.")
 
+def menu_upload_image_once():
+    """Chụp ảnh từ camera và gửi lên server Render."""
+    try:
+        os.makedirs(IMAGE_UPLOAD_CFG["img_dir"], exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        img_path = os.path.join(IMAGE_UPLOAD_CFG["img_dir"], f"{ts}.jpg")
+        
+        print(f"[Camera] Đang chụp ảnh lưu vào: {img_path}")
+        img_path, _ = capture_jpeg_cli(img_path, width=1280, height=720, quality=80)
+        print(f"[Camera] Đã chụp thành công: {img_path}")
+        
+        print(f"[Upload] Đang gửi ảnh lên {IMAGE_UPLOAD_CFG['api_base']}...")
+        resp = upload_green_image(
+            IMAGE_UPLOAD_CFG["api_base"], 
+            img_path, 
+            IMAGE_UPLOAD_CFG["device_id"], 
+            token=IMAGE_UPLOAD_CFG["auth_token"]
+        )
+        print("[Upload] Thành công! Response:", resp)
+    except Exception as e:
+        print(f"[Lỗi] Không thể chụp/gửi ảnh: {e}", file=sys.stderr)
+
 def upload_snapshot(cfg=None):
     """
     Gửi file snapshot JSON nội bộ lên server coworker.
@@ -309,6 +334,7 @@ def main_menu():
         print("10) Ghi JSONL liên tục (để upload)")
         print("11) Gửi snapshot lên server")
         print("12) Điều khiển Servo (mở/đóng/giữa/góc)")
+        print("13) Chụp & gửi ảnh (Render)")
 
         choice = input("Chọn: ").strip()
         if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
@@ -323,6 +349,7 @@ def main_menu():
         elif choice == "10": stream_jsonl(cfg)
         elif choice == "11": upload_snapshot()
         elif choice == "12": servo_menu(cfg)
+        elif choice == "13": menu_upload_image_once()
         else:
             print("Lựa chọn không hợp lệ.")
 
