@@ -12,6 +12,10 @@ from datetime import datetime
 import json, os
 from app.uploader import post_file
 from app.config import load_config
+import os
+from datetime import datetime
+from app.cam_capture_cli import capture_jpeg_cli
+from app.uploader_greenimage import upload_green_image
 
 def read_once_0501(cfg):
     s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))

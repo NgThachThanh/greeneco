@@ -1,6 +1,31 @@
-env/
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.log
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
 .env
+
+# Editors
+.vscode/
+.idea/
+
+# Build/Dist
+build/
+dist/
+
+# Raspberry Pi / runtime artifacts
+.lgd-*
+*.sock
+*.log
+logs/
+
+# Camera/output caches
+greeneco_out/
+# Nếu muốn giữ JSON snapshot thì KHÔNG ignore nó
+# outbox/*.jpg
+# outbox/*.png
+
+# OS junk
+.DS_Store
+Thumbs.db
