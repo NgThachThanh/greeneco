@@ -6,17 +6,16 @@ def run(resolution=(1280, 720), backend="auto"):
     Camera preview an toàn và đúng màu:
       - Nếu Picamera2 + OpenCV HighGUI OK: hiển thị bằng cv2.imshow
         + Chuyển RGBA/XRGB/XBGR -> BGR hoặc RGB -> BGR để đúng màu.
-            - Nếu Picamera2 có nhưng HighGUI không OK: dùng Picamera2 Preview (QTGL),
-                nếu QTGL lỗi do event loop/Qt/EGL thì fallback sang DRM; nếu vẫn lỗi thì chạy không preview.
+      - Nếu Picamera2 có nhưng HighGUI không OK: dùng Picamera2 Preview (QTGL),
+        nếu QTGL lỗi do event loop/Qt/EGL thì fallback sang DRM; nếu vẫn lỗi thì chạy không preview.
       - Nếu không có Picamera2 nhưng HighGUI OK: fallback USB cam (/dev/video0).
-      - Nếu không có gì: báo lỗi gợi ý cài đặt.
-    Nhấn 'q' để thoát (với OpenCV), hoặc Ctrl+C khi dùng QTGL.
+      - Nếu không có gì: có thể dùng CLI preview qua rpicam-hello (backend='cli').
+    Nhấn 'q' để thoát (với OpenCV), hoặc Ctrl+C khi dùng QTGL/DRM/CLI.
     """
     # Import TRONG hàm để menu không crash nếu thiếu lib
     picam = None
     Preview = None
     cv2 = None
-
     try:
         from picamera2 import Picamera2, Preview as _Preview
         picam = Picamera2
@@ -163,11 +162,45 @@ def run(resolution=(1280, 720), backend="auto"):
                 pass
         return
 
+    # Nhánh 3: CLI preview qua rpicam-hello nếu được yêu cầu, hoặc fallback cuối
+    if backend in ("cli", "rpicam", "auto"):
+        try:
+            import subprocess, shutil, signal, time
+            cmd = None
+            # Ưu tiên rpicam-hello (mới); nếu không có, thử libcamera-hello (cũ)
+            if shutil.which("rpicam-hello"):
+                cmd = ["rpicam-hello", "-t", "0"]  # 0 = không giới hạn thời gian
+            elif shutil.which("libcamera-hello"):
+                cmd = ["libcamera-hello", "-t", "0"]
+            if cmd is not None:
+                print("CLI preview (rpicam-hello/libcamera-hello). Nhấn Ctrl+C để thoát.")
+                proc = subprocess.Popen(cmd)
+                try:
+                    proc.wait()
+                except KeyboardInterrupt:
+                    pass
+                finally:
+                    try:
+                        proc.terminate()
+                        # Đợi một chút để tiến trình thoát gọn gàng
+                        for _ in range(5):
+                            if proc.poll() is not None:
+                                break
+                            time.sleep(0.1)
+                        if proc.poll() is None:
+                            proc.kill()
+                    except Exception:
+                        pass
+                return
+        except Exception as e:
+            # Bỏ qua để rơi xuống thông báo hướng dẫn
+            print(f"CLI preview không khả dụng: {e}")
+
     # Không còn lựa chọn
     raise RuntimeError(
-        "Không có Picamera2 và OpenCV HighGUI không khả dụng.\n"
-        "Cài 1 trong các lựa chọn sau để xem preview:\n"
-        "  1) Picamera2 native preview: sudo apt-get install -y python3-picamera2 libcamera-apps\n"
-        "  2) OpenCV có GUI: sudo apt-get install -y python3-opencv\n"
-        "  3) Hoặc build lại OpenCV với GTK/Qt theo hướng dẫn của OpenCV"
+        "Không có backend preview khả dụng.\n"
+        "Bạn có thể:\n"
+        "  - Dùng Picamera2: sudo apt-get install -y python3-picamera2 libcamera-apps\n"
+        "  - Dùng OpenCV có GUI: sudo apt-get install -y python3-opencv\n"
+        "  - Hoặc dùng CLI: sudo apt-get install -y libcamera-apps (rpicam-hello/libcamera-hello)\n"
     )
