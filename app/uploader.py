@@ -28,43 +28,81 @@ def _to_utc_z(ts_str: str) -> str:
 
 def _map_payload(internal: dict) -> dict:
     env = internal.get("env", {}) or {}
-    soil = internal.get("soil", {}) or {}
+    soil = internal.get("soil")  # có thể là None hoặc dict
     co2  = internal.get("co2", {}) or {}
 
-    # clamp UV âm nếu sensor nhả rác
-    uv = env.get("uv_mw_cm2")
-    if isinstance(uv, (int, float)) and uv < 0:
+    # Hàm helper để đảm bảo giá trị số hợp lệ
+    def safe_float(val, default=0.0):
+        if val is None:
+            return default
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+    
+    def safe_int(val, default=0):
+        if val is None:
+            return default
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return default
+
+    # Clamp UV âm nếu sensor nhả rác
+    uv = safe_float(env.get("uv_mw_cm2"))
+    if uv < 0:
         uv = 0.0
 
     outward = {
-        "deviceId": internal.get("device_id"),
+        "deviceId": internal.get("device_id") or "UNKNOWN",
         "timestamp": _to_utc_z(internal.get("ts")),
         "environment": {
-            "temperatureC": env.get("temp_c"),
-            "humidityPct": env.get("rh_pct"),
-            "pressureHpa": env.get("pressure_hpa"),
-            "lux": env.get("lux"),
+            "temperatureC": safe_float(env.get("temp_c")),
+            "humidityPct": safe_float(env.get("rh_pct")),
+            "pressureHpa": safe_float(env.get("pressure_hpa")),
+            "lux": safe_float(env.get("lux")),
             "uvMwCm2": uv,
-            "altitudeM": env.get("alt_m"),
+            "altitudeM": safe_float(env.get("alt_m")),
         },
         "co2": {
-            "ppm": co2.get("ppm")
+            "ppm": safe_float(co2.get("ppm"))
         },
-        "soil": {
-            "temperatureC": soil.get("temp_c"),
-            "humidityPct": soil.get("hum_pct"),
-            "ecUSCm": soil.get("ec_uS_cm"),
-            "ph": soil.get("ph"),
-            "n": soil.get("n_mgkg"),
-            "p": soil.get("p_mgkg"),
-            "k": soil.get("k_mgkg"),
-            "saltMgL": soil.get("salt_mgL"),
-        }
     }
+    
+    # Chỉ thêm soil nếu có dữ liệu thật
+    if soil and isinstance(soil, dict):
+        outward["soil"] = {
+            "temperatureC": safe_float(soil.get("temp_c")),
+            "humidityPct": safe_float(soil.get("hum_pct")),
+            "ecUSCm": safe_float(soil.get("ec_uS_cm")),
+            "ph": safe_float(soil.get("ph")),
+            "n": safe_float(soil.get("n_mgkg")),
+            "p": safe_float(soil.get("p_mgkg")),
+            "k": safe_float(soil.get("k_mgkg")),
+            "saltMgL": safe_float(soil.get("salt_mgL")),
+        }
+    else:
+        # Nếu không có soil, gửi giá trị mặc định
+        outward["soil"] = {
+            "temperatureC": 0.0,
+            "humidityPct": 0.0,
+            "ecUSCm": 0.0,
+            "ph": 0.0,
+            "n": 0.0,
+            "p": 0.0,
+            "k": 0.0,
+            "saltMgL": 0.0,
+        }
+    
     return outward
 
 def post_dict(internal_payload: dict, timeout=15):
     body = _map_payload(internal_payload)
+    
+    # Debug: In ra body sẽ gửi (có thể comment sau khi chạy ổn)
+    print("[DEBUG] Sending payload:")
+    print(json.dumps(body, indent=2, ensure_ascii=False))
+    
     resp = requests.post(API_URL, json=body, timeout=timeout)
     resp.raise_for_status()
     return resp.status_code, resp.text
