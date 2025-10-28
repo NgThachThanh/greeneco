@@ -1,6 +1,5 @@
 camera:
   resolution: [1280, 720]
-  backend: "opencv"  # Ưu tiên OpenCV GUI để preview (cv2.imshow, bấm q để thoát)
 
 sen0501:
   i2c_bus: 1

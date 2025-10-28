@@ -412,8 +412,7 @@ def main_menu():
             try:
                 cam_cfg = cfg.get("camera", {})
                 res = tuple(cam_cfg.get("resolution", (1280, 720)))
-                backend = cam_cfg.get("backend", "auto")
-                run_cam(res, backend=backend)
+                run_cam(res)
             except Exception as e:
                 print(f"Lỗi camera preview: {e}")
         elif choice == "2": read_once_0501(cfg)
