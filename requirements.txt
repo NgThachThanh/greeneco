@@ -1,6 +1,6 @@
 # === GreenEco Project Dependencies ===
 # Core camera & image handling
-opencv-python-headless
+opencv-python  # Bản có GUI để hiển thị preview window (cv2.imshow)
 numpy
 
 # Environmental sensors (DFRobot SEN0501)

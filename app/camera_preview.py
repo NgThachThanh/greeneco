@@ -20,34 +20,44 @@ def run(resolution=(1280, 720), backend="auto"):
         from picamera2 import Picamera2, Preview as _Preview
         picam = Picamera2
         Preview = _Preview
-    except Exception:
+        print("[DEBUG] Picamera2 imported successfully")
+    except Exception as e:
+        print(f"[DEBUG] Picamera2 not available: {e}")
         picam = None
         Preview = None
 
     try:
         import cv2 as _cv2
         cv2 = _cv2
-    except Exception:
+        print(f"[DEBUG] OpenCV imported successfully, version: {cv2.__version__}")
+    except Exception as e:
+        print(f"[DEBUG] OpenCV not available: {e}")
         cv2 = None
 
     def _highgui_ready(cv2_mod):
         if cv2_mod is None:
+            print("[DEBUG] cv2 module is None")
             return False
         # Nới lỏng kiểm tra: chỉ cần tạo/huỷ được 1 window là coi như OK
         try:
+            print("[DEBUG] Testing cv2.namedWindow...")
             cv2_mod.namedWindow("___probe___")
             cv2_mod.destroyWindow("___probe___")
+            print("[DEBUG] HighGUI test PASSED")
             return True
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] HighGUI test FAILED: {e}")
             return False
 
     highgui_ok = _highgui_ready(cv2)
+    print(f"[DEBUG] highgui_ok = {highgui_ok}, backend = {backend}")
 
     # Cho phép người dùng ép backend cụ thể
     backend = (backend or "auto").lower()
 
     # Nhánh 1: Có Picamera2
     if picam is not None:
+        print("[DEBUG] Picamera2 available, initializing camera...")
         cam = picam()
         try:
             w, h = resolution
@@ -56,13 +66,14 @@ def run(resolution=(1280, 720), backend="auto"):
 
         cam.configure(cam.create_preview_configuration(main={"size": (int(w), int(h))}))
         cam.start()
+        print(f"[DEBUG] Camera started with resolution {w}x{h}")
 
         # Ép dùng OpenCV nếu backend = 'opencv'
         if backend == "opencv" and not highgui_ok:
-            print("Backend yêu cầu 'opencv' nhưng OpenCV HighGUI không khả dụng -> bỏ qua yêu cầu.")
+            print("[WARNING] Backend yêu cầu 'opencv' nhưng OpenCV HighGUI không khả dụng -> bỏ qua yêu cầu.")
 
         if highgui_ok and (backend in ("auto", "opencv")):
-            print("Camera preview. Nhấn q để thoát.")
+            print("[DEBUG] Using OpenCV HighGUI for preview (press 'q' to quit)")
             try:
                 while True:
                     frame = cam.capture_array()  # thường là 4 kênh RGBA/XRGB/XBGR
