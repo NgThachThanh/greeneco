@@ -1,7 +1,7 @@
 # app/camera_preview.py
 # -*- coding: utf-8 -*-
 
-def run(resolution=(1280, 720)):
+def run(resolution=(1280, 720), backend="auto"):
     """
     Camera preview an toàn và đúng màu:
       - Nếu Picamera2 + OpenCV HighGUI OK: hiển thị bằng cv2.imshow
@@ -34,11 +34,8 @@ def run(resolution=(1280, 720)):
     def _highgui_ready(cv2_mod):
         if cv2_mod is None:
             return False
+        # Nới lỏng kiểm tra: chỉ cần tạo/huỷ được 1 window là coi như OK
         try:
-            info = cv2_mod.getBuildInformation()
-            ok = ("GUI:" in info and ("GTK" in info or "QT" in info or "Win32" in info))
-            if not ok:
-                return False
             cv2_mod.namedWindow("___probe___")
             cv2_mod.destroyWindow("___probe___")
             return True
@@ -46,6 +43,9 @@ def run(resolution=(1280, 720)):
             return False
 
     highgui_ok = _highgui_ready(cv2)
+
+    # Cho phép người dùng ép backend cụ thể
+    backend = (backend or "auto").lower()
 
     # Nhánh 1: Có Picamera2
     if picam is not None:
@@ -58,7 +58,11 @@ def run(resolution=(1280, 720)):
         cam.configure(cam.create_preview_configuration(main={"size": (int(w), int(h))}))
         cam.start()
 
-        if highgui_ok:
+        # Ép dùng OpenCV nếu backend = 'opencv'
+        if backend == "opencv" and not highgui_ok:
+            print("Backend yêu cầu 'opencv' nhưng OpenCV HighGUI không khả dụng -> bỏ qua yêu cầu.")
+
+        if highgui_ok and (backend in ("auto", "opencv")):
             print("Camera preview. Nhấn q để thoát.")
             try:
                 while True:
@@ -83,7 +87,7 @@ def run(resolution=(1280, 720)):
                     pass
             return
 
-        # Không có HighGUI: dùng preview gốc QTGL
+        # Không có HighGUI hoặc người dùng yêu cầu qtgl/drm: dùng preview gốc
         if Preview is None:
             cam.stop()
             raise RuntimeError(
@@ -94,33 +98,39 @@ def run(resolution=(1280, 720)):
                 "  - hoặc build lại OpenCV với GTK/Qt"
             )
 
-        print("Picamera2 native preview (QTGL). Nhấn Ctrl+C để thoát.")
+        preferred_order = []
+        if backend == "qtgl":
+            preferred_order = ["qtgl", "drm"]
+        elif backend == "drm":
+            preferred_order = ["drm", "qtgl"]
+        else:
+            preferred_order = ["qtgl", "drm"]  # auto
+
+        print("Picamera2 native preview. Nhấn Ctrl+C để thoát.")
         try:
-            try:
-                # Thử QTGL trước
-                cam.start_preview(Preview.QTGL)
-                import time
-                while True:
-                    time.sleep(0.1)
-            except Exception as e:
-                # Một số môi trường gặp lỗi: "An event loop is already running" hoặc vấn đề Qt/EGL.
-                msg = (str(e) or "").lower()
-                print(f"QTGL preview không khả dụng ({e}). Thử fallback DRM...")
+            import time
+            last_error = None
+            for mode in preferred_order:
                 try:
-                    cam.start_preview(Preview.DRM)
-                    import time
+                    if mode == "qtgl":
+                        cam.start_preview(Preview.QTGL)
+                    elif mode == "drm":
+                        cam.start_preview(Preview.DRM)
+                    print(f"Đang dùng preview: {mode.upper()} (Ctrl+C để thoát)")
                     while True:
                         time.sleep(0.1)
-                except Exception as e2:
-                    # DRM cũng lỗi -> chạy không preview, vẫn giữ camera hoạt động để kiểm tra.
-                    print(f"DRM preview cũng không khả dụng ({e2}). Chạy không preview (Ctrl+C để dừng)...")
-                    import time
-                    try:
-                        while True:
-                            # Giữ vòng lặp, có thể thăm dò frame nếu cần
-                            time.sleep(0.25)
-                    except KeyboardInterrupt:
-                        pass
+                except Exception as e:
+                    print(f"Preview {mode.upper()} không khả dụng: {e}")
+                    last_error = e
+                    # Thử mode kế tiếp
+                    continue
+            # Nếu tới đây là cả hai đều lỗi
+            print(f"Không dùng được QTGL/DRM ({last_error}). Chạy không preview (Ctrl+C để dừng)...")
+            try:
+                while True:
+                    time.sleep(0.25)
+            except KeyboardInterrupt:
+                pass
         except KeyboardInterrupt:
             pass
         finally:
@@ -128,7 +138,7 @@ def run(resolution=(1280, 720)):
         return
 
     # Nhánh 2: Không có Picamera2
-    if highgui_ok:
+    if highgui_ok and (backend in ("auto", "usb", "opencv")):
         # Fallback USB cam
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
