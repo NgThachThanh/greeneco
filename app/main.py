@@ -408,7 +408,11 @@ def main_menu():
         print("14) Điều khiển GPIO (Fan/Pump/Light)")
 
         choice = input("Chọn: ").strip()
-        if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
+        if   choice == "1":
+            try:
+                run_cam(tuple(cfg["camera"]["resolution"]))
+            except Exception as e:
+                print(f"Lỗi camera preview: {e}")
         elif choice == "2": read_once_0501(cfg)
         elif choice == "3": stream_co2(cfg)
         elif choice == "4": combined_log_all(cfg)

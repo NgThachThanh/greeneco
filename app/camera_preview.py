@@ -6,7 +6,8 @@ def run(resolution=(1280, 720)):
     Camera preview an toàn và đúng màu:
       - Nếu Picamera2 + OpenCV HighGUI OK: hiển thị bằng cv2.imshow
         + Chuyển RGBA/XRGB/XBGR -> BGR hoặc RGB -> BGR để đúng màu.
-      - Nếu Picamera2 có nhưng HighGUI không OK: dùng Picamera2 Preview (QTGL).
+            - Nếu Picamera2 có nhưng HighGUI không OK: dùng Picamera2 Preview (QTGL),
+                nếu QTGL lỗi do event loop/Qt/EGL thì fallback sang DRM; nếu vẫn lỗi thì chạy không preview.
       - Nếu không có Picamera2 nhưng HighGUI OK: fallback USB cam (/dev/video0).
       - Nếu không có gì: báo lỗi gợi ý cài đặt.
     Nhấn 'q' để thoát (với OpenCV), hoặc Ctrl+C khi dùng QTGL.
@@ -95,10 +96,31 @@ def run(resolution=(1280, 720)):
 
         print("Picamera2 native preview (QTGL). Nhấn Ctrl+C để thoát.")
         try:
-            cam.start_preview(Preview.QTGL)
-            import time
-            while True:
-                time.sleep(0.1)
+            try:
+                # Thử QTGL trước
+                cam.start_preview(Preview.QTGL)
+                import time
+                while True:
+                    time.sleep(0.1)
+            except Exception as e:
+                # Một số môi trường gặp lỗi: "An event loop is already running" hoặc vấn đề Qt/EGL.
+                msg = (str(e) or "").lower()
+                print(f"QTGL preview không khả dụng ({e}). Thử fallback DRM...")
+                try:
+                    cam.start_preview(Preview.DRM)
+                    import time
+                    while True:
+                        time.sleep(0.1)
+                except Exception as e2:
+                    # DRM cũng lỗi -> chạy không preview, vẫn giữ camera hoạt động để kiểm tra.
+                    print(f"DRM preview cũng không khả dụng ({e2}). Chạy không preview (Ctrl+C để dừng)...")
+                    import time
+                    try:
+                        while True:
+                            # Giữ vòng lặp, có thể thăm dò frame nếu cần
+                            time.sleep(0.25)
+                    except KeyboardInterrupt:
+                        pass
         except KeyboardInterrupt:
             pass
         finally:
