@@ -8,8 +8,8 @@ from app.es_soil7 import ESSoil7
 def _iso_now():
     return datetime.now().isoformat(timespec="seconds")
 
-def collect_all(cfg):
-    """Đọc cả ENV, CO2, SOIL rồi trả dict JSON-ready."""
+def collect_all(cfg, include_gpio=False):
+    """Đọc cả ENV, CO2, SOIL và GPIO (nếu yêu cầu) rồi trả dict JSON-ready."""
     s1 = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
     s2 = Sen0220(port=cfg["sen0220"]["port"], baud=cfg["sen0220"]["baud"])
     soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
@@ -46,6 +46,16 @@ def collect_all(cfg):
             "salt_mgL": c.get("salt_mgL"),
         },
     }
+    
+    # Thêm GPIO states nếu được yêu cầu
+    if include_gpio:
+        try:
+            from app.gpio_controller import get_all_states
+            data["gpio"] = get_all_states()
+        except Exception as e:
+            print(f"[Warning] Could not read GPIO states: {e}")
+            data["gpio"] = None
+    
     return data
 
 def write_json(path, data):

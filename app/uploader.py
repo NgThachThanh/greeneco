@@ -30,6 +30,7 @@ def _map_payload(internal: dict) -> dict:
     env = internal.get("env", {}) or {}
     soil = internal.get("soil")  # có thể là None hoặc dict
     co2  = internal.get("co2", {}) or {}
+    gpio = internal.get("gpio")  # trạng thái GPIO devices (optional)
 
     # Hàm helper để đảm bảo giá trị số hợp lệ
     def safe_float(val, default=0.0):
@@ -93,6 +94,16 @@ def _map_payload(internal: dict) -> dict:
             "k": 0.0,
             "saltMgL": 0.0,
         }
+    
+    # Thêm GPIO devices nếu có
+    if gpio and isinstance(gpio, dict):
+        devices = []
+        for device_name, is_on in gpio.items():
+            devices.append({
+                "name": device_name,
+                "state": "ON" if is_on else "OFF"
+            })
+        outward["devices"] = devices
     
     return outward
 

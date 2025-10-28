@@ -20,6 +20,9 @@ IMAGE_UPLOAD_CFG = {
     "auth_token": None,  # nếu server yêu cầu thì nhét vào
 }
 
+# GPIO control sẽ được import lazy để tránh lỗi trên máy không có RPi.GPIO
+_gpio_initialized = False
+
 def read_once_0501(cfg):
     s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
     print(s.read())
@@ -273,6 +276,76 @@ def servo_menu(cfg=None):
         else:
             print("Lựa chọn không hợp lệ.")
 
+def gpio_control_menu(cfg=None):
+    """Menu điều khiển GPIO devices: fan, pump, light."""
+    global _gpio_initialized
+    
+    try:
+        from app import gpio_controller as gpio
+    except Exception as e:
+        print(f"Không thể import GPIO module: {e}")
+        return
+    
+    # Khởi tạo GPIO lần đầu
+    if not _gpio_initialized:
+        gpio.init_gpio()
+        _gpio_initialized = True
+    
+    while True:
+        states = gpio.get_all_states()
+        print("\n=== GPIO Control ===")
+        print("Trạng thái hiện tại:")
+        for dev, state in states.items():
+            pin = gpio.DEVICES[dev]
+            status = "ON" if state else "OFF"
+            print(f"  {dev:8} (pin {pin:2}) -> {status}")
+        
+        print("\nTùy chọn:")
+        print("1) Bật thiết bị")
+        print("2) Tắt thiết bị")
+        print("3) Đảo trạng thái (toggle)")
+        print("4) Bật tất cả")
+        print("5) Tắt tất cả")
+        print("6) Gửi trạng thái lên server")
+        print("7) Thoát menu GPIO")
+        
+        ch = input("Chọn: ").strip()
+        
+        if ch == "1":
+            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            gpio.turn_on(dev)
+        elif ch == "2":
+            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            gpio.turn_off(dev)
+        elif ch == "3":
+            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            gpio.toggle_device(dev)
+        elif ch == "4":
+            gpio.turn_all_on()
+        elif ch == "5":
+            gpio.turn_all_off()
+        elif ch == "6":
+            try:
+                # Gửi kèm với sensor data
+                from app.json_export import collect_all
+                from app.uploader import post_dict
+                
+                print("Đang đọc sensors và GPIO...")
+                data = collect_all(cfg, include_gpio=True)
+                
+                print("Đang gửi lên server...")
+                code, text = post_dict(data)
+                print(f"[Upload] POST OK: {code}")
+                print(text)
+            except Exception as e:
+                print(f"[Upload] Lỗi: {e}")
+                import traceback
+                traceback.print_exc()
+        elif ch == "7":
+            break
+        else:
+            print("Lựa chọn không hợp lệ.")
+
 def menu_upload_image_once():
     """Chụp ảnh từ camera và gửi lên server Render."""
     try:
@@ -297,26 +370,23 @@ def menu_upload_image_once():
 
 def upload_snapshot(cfg=None):
     """
-    Gửi file snapshot JSON nội bộ lên server coworker.
-    Ưu tiên lấy đường dẫn từ cfg['export']['json_path'], nếu không có thì fallback 'outbox/greeneco_snapshot.json'.
+    Đọc sensors + GPIO và gửi lên server (không qua file).
     """
-    # Lấy path từ config nếu có
-    json_path = None
     try:
-        if cfg and "export" in cfg and "json_path" in cfg["export"]:
-            json_path = cfg["export"]["json_path"]
-    except Exception:
-        pass
-
-    if not json_path:
-        json_path = "outbox/greeneco_snapshot.json"
-
-    print(f"[Uploader] Đang gửi: {json_path}")
-    try:
-        code, text = post_file(json_path, timeout=15)
-        print(f"[Uploader] POST OK: {code} — {text}")
+        from app.json_export import collect_all
+        from app.uploader import post_dict
+        
+        print("[Upload] Đang đọc sensors và GPIO...")
+        data = collect_all(cfg, include_gpio=True)
+        
+        print("[Upload] Đang gửi lên server...")
+        code, text = post_dict(data)
+        print(f"[Upload] POST OK: {code}")
+        print(text)
     except Exception as e:
-        print(f"[Uploader] LỖI POST: {e}")
+        print(f"[Upload] LỖI: {e}")
+        import traceback
+        traceback.print_exc()
 
 def main_menu():
     cfg = load_config("config/settings.yml")
@@ -335,6 +405,7 @@ def main_menu():
         print("11) Gửi snapshot lên server")
         print("12) Điều khiển Servo (mở/đóng/giữa/góc)")
         print("13) Chụp & gửi ảnh (Render)")
+        print("14) Điều khiển GPIO (Fan/Pump/Light)")
 
         choice = input("Chọn: ").strip()
         if   choice == "1": run_cam(tuple(cfg["camera"]["resolution"]))
@@ -347,9 +418,10 @@ def main_menu():
         elif choice == "8": break
         elif choice == "9": export_json_once(cfg)
         elif choice == "10": stream_jsonl(cfg)
-        elif choice == "11": upload_snapshot()
+        elif choice == "11": upload_snapshot(cfg)
         elif choice == "12": servo_menu(cfg)
         elif choice == "13": menu_upload_image_once()
+        elif choice == "14": gpio_control_menu(cfg)
         else:
             print("Lựa chọn không hợp lệ.")
 
