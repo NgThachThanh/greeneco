@@ -11,9 +11,19 @@ def run(res=(1280, 720)):
     def _fallback_cli():
         cmd = None
         if shutil.which("rpicam-hello"):
-            cmd = ["rpicam-hello", "-t", "0"]
+            cmd = [
+                "rpicam-hello", "-t", "0",
+                "--width", str(int(res[0]) if isinstance(res, (list, tuple)) and len(res) == 2 else 960),
+                "--height", str(int(res[1]) if isinstance(res, (list, tuple)) and len(res) == 2 else 540),
+                "--framerate", "60"
+            ]
         elif shutil.which("libcamera-hello"):
-            cmd = ["libcamera-hello", "-t", "0"]
+            cmd = [
+                "libcamera-hello", "-t", "0",
+                "--width", str(int(res[0]) if isinstance(res, (list, tuple)) and len(res) == 2 else 960),
+                "--height", str(int(res[1]) if isinstance(res, (list, tuple)) and len(res) == 2 else 540),
+                "--framerate", "60"
+            ]
         if cmd is None:
             print("Không tìm thấy rpicam-hello/libcamera-hello để fallback.")
             return
@@ -40,11 +50,21 @@ def run(res=(1280, 720)):
         return
 
     # 2) Có GUI: chạy đường OpenCV
+    # 2) Có GUI: chạy đường OpenCV
     cam = Picamera2()
-    cam.configure(cam.create_preview_configuration(main={"size": (1280, 720)}))
+    # Dùng đúng độ phân giải yêu cầu
+    try:
+        w = int(res[0]) if isinstance(res, (list, tuple)) and len(res) == 2 else 960
+        h = int(res[1]) if isinstance(res, (list, tuple)) and len(res) == 2 else 540
+    except Exception:
+        w, h = 960, 540
+    cam.configure(cam.create_preview_configuration(main={"size": (w, h)}))
 
     try:
         cam.start()
+        # Thử đặt mục tiêu 60 fps (có thể không đạt nếu sensor/mode không hỗ trợ)
+        with contextlib.suppress(Exception):
+            cam.set_controls({"FrameRate": 60.0})
         print("Preview running. Nhấn q để thoát.")
         while True:
             frame = cam.capture_array()

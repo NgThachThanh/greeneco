@@ -1,5 +1,5 @@
 camera:
-  resolution: [1280, 720]
+  resolution: [960, 540]
 
 sen0501:
   i2c_bus: 1
