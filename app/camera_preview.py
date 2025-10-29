@@ -69,6 +69,12 @@ def run(res=(1280, 720)):
         # Xử lý lỗi thường gặp: "An event loop is already running"
         msg = str(e).lower()
         print(f"Camera preview lỗi: {e}")
+        # Đảm bảo giải phóng camera TRƯỚC khi gọi CLI để tránh "Pipeline handler in use"
+        with contextlib.suppress(Exception):
+            cam.stop()
+        with contextlib.suppress(Exception):
+            cam.close()
+
         if "event loop is already running" in msg or "event loop" in msg:
             print("Gặp xung đột event loop. Chuyển sang CLI preview cho ổn định...")
             _fallback_cli()
@@ -76,9 +82,14 @@ def run(res=(1280, 720)):
             # Thử DRM nếu có thể
             try:
                 print("Thử fallback DRM preview...")
-                cam.start_preview(Preview.DRM)
-                while True:
-                    time.sleep(0.1)
+                # Khởi tạo phiên mới để đảm bảo tài nguyên sạch
+                with contextlib.suppress(Exception):
+                    cam2 = Picamera2()
+                    cam2.configure(cam2.create_preview_configuration(main={"size": (1280, 720)}))
+                    cam2.start()
+                    cam2.start_preview(Preview.DRM)
+                    while True:
+                        time.sleep(0.1)
             except Exception as e2:
                 print(f"Fallback DRM cũng lỗi: {e2}")
                 _fallback_cli()
