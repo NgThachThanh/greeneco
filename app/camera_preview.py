@@ -89,6 +89,8 @@ def run(res=(1280, 720)):
             pass
         with contextlib.suppress(Exception):
             cam.stop()
+        with contextlib.suppress(Exception):
+            cam.close()
 
 # Cho chạy độc lập khi bạn test file này riêng
 if __name__ == "__main__":

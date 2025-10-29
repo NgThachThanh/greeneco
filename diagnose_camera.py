@@ -6,6 +6,42 @@ Chạy trên Raspberry Pi để xem lỗi cụ thể
 """
 
 import sys
+import subprocess
+import shlex
+
+def check_camera_busy():
+    """Kiểm tra xem thiết bị camera có đang bị process khác giữ không"""
+    print("=" * 50)
+    print("KIỂM TRA CAMERA BỊ CHIẾM DỤNG")
+    print("=" * 50)
+
+    devices = [
+        "/dev/media0", "/dev/media1", "/dev/media2",
+        "/dev/video0", "/dev/video1",
+    ]
+    found = False
+    for dev in devices:
+        try:
+            # fuser hiển thị PID nào đang mở thiết bị
+            res = subprocess.run(["fuser", dev], capture_output=True, text=True)
+            pids = res.stdout.strip()
+            if pids:
+                found = True
+                print(f"Thiết bị {dev} đang bị giữ bởi PID: {pids}")
+        except FileNotFoundError:
+            # fuser có thể chưa cài đặt
+            pass
+        except Exception as e:
+            pass
+
+    if not found:
+        print("Không thấy process nào chiếm dụng trực tiếp /dev/media* hoặc /dev/video*.")
+    else:
+        print("\nGợi ý giải phóng:")
+        print("  - Kiểm tra tiến trình: ps aux | grep -E 'libcamera|rpicam|picamera2|python|motion' ")
+        print("  - Dừng tiến trình đó: kill -9 <PID>")
+        print("  - Hoặc reboot nếu chưa rõ tiến trình nào giữ.")
+    print()
 
 def check_imports():
     """Kiểm tra các thư viện có import được không"""
@@ -213,6 +249,7 @@ def main():
     
     # Step 2: Check hardware
     check_camera_device()
+    check_camera_busy()
     
     # Step 3: Test Picamera2
     if not test_picamera2():
