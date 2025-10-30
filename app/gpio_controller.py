@@ -146,6 +146,63 @@ def toggle_device(device_name: str):
     current = get_device_state(device_name)
     return set_device(device_name, not current)
 
+def diagnose_device(device_name: str, cycles: int = 2, delay: float = 0.5):
+    """Chẩn đoán nhanh 1 thiết bị: đọc/ghi mức pin nhiều lần và in thông tin.
+
+    - In cực tính active_low
+    - Ghi HIGH/LOW trực tiếp và đọc lại mức GPIO
+    - Thử ON/OFF theo logic set_device
+    """
+    if device_name not in DEVICES:
+        print(f"[GPIO] Device '{device_name}' not found. Available: {list(DEVICES.keys())}")
+        return False
+
+    pin = DEVICES[device_name]
+    al = ACTIVE_LOW.get(device_name, False)
+    print(f"[GPIO DIAG] {device_name}: GPIO{pin}, active_low={al}")
+
+    if GPIO is None:
+        print("[GPIO DIAG] Mock mode (không có RPi.GPIO)")
+        return False
+
+    try:
+        # Đảm bảo pin là output
+        GPIO.setup(pin, GPIO.OUT)
+        func = GPIO.gpio_function(pin)
+        print(f"[GPIO DIAG] Function={func} (GPIO.BCM OUT is {GPIO.OUT})")
+
+        for i in range(cycles):
+            # Ghi HIGH trực tiếp
+            GPIO.output(pin, GPIO.HIGH)
+            time.sleep(delay)
+            lv_h = GPIO.input(pin)
+            print(f"  Cycle {i+1}: direct HIGH -> level={lv_h}")
+
+            # Ghi LOW trực tiếp
+            GPIO.output(pin, GPIO.LOW)
+            time.sleep(delay)
+            lv_l = GPIO.input(pin)
+            print(f"  Cycle {i+1}: direct LOW  -> level={lv_l}")
+
+            # Theo logic thiết bị
+            set_device(device_name, True)
+            time.sleep(delay)
+            lv_on = GPIO.input(pin)
+            print(f"  Cycle {i+1}: logic  ON   -> level={lv_on}")
+
+            set_device(device_name, False)
+            time.sleep(delay)
+            lv_off = GPIO.input(pin)
+            print(f"  Cycle {i+1}: logic  OFF  -> level={lv_off}")
+
+        print("[GPIO DIAG] Done. Nếu level thay đổi đúng nhưng relay vẫn sai, khả năng do phần cứng:")
+        print("  - Module relay low-level trigger 5V: mức HIGH 3.3V có thể vẫn kéo LED opto sáng -> luôn ON")
+        print("  - Giải pháp: cấp 3.3V cho phần input (nếu module hỗ trợ), dùng JD-VCC tách cuộn relay, hoặc thêm transistor/ULN2003")
+        return True
+    except Exception as e:
+        print(f"[GPIO DIAG] Error: {e}")
+        return False
+
 def turn_all_off():
     """Tắt tất cả thiết bị."""
     for device in DEVICES:

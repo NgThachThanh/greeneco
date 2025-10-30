@@ -307,7 +307,8 @@ def gpio_control_menu(cfg=None):
         print("4) Bật tất cả")
         print("5) Tắt tất cả")
         print("6) Gửi trạng thái lên server")
-        print("7) Thoát menu GPIO")
+        print("7) Chẩn đoán 1 thiết bị (test pin)")
+        print("8) Thoát menu GPIO")
         
         ch = input("Chọn: ").strip()
         
@@ -342,6 +343,12 @@ def gpio_control_menu(cfg=None):
                 import traceback
                 traceback.print_exc()
         elif ch == "7":
+            dev = input("Thiết bị cần chẩn đoán (fan1/fan2/pump/light): ").strip()
+            try:
+                gpio.diagnose_device(dev)
+            except Exception as e:
+                print(f"[GPIO] Diagnose error: {e}")
+        elif ch == "8":
             break
         else:
             print("Lựa chọn không hợp lệ.")
