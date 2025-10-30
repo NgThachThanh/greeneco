@@ -11,12 +11,21 @@ except ImportError:
     GPIO = None
     print("[Warning] RPi.GPIO not available. Using mock mode.")
 
-# Định nghĩa các thiết bị và GPIO pin tương ứng
+# Định nghĩa các thiết bị và GPIO pin tương ứng (BCM numbering)
 DEVICES = {
     "fan1": 5,    # pin 29 (GPIO5)
     "fan2": 6,    # pin 31 (GPIO6)
     "pump": 13,   # pin 33 (GPIO13)
     "light": 19   # pin 35 (GPIO19)
+}
+
+# Đa số module relay phổ biến là ACTIVE-LOW: kéo chân IN xuống LOW sẽ kích relay (ON)
+# Với ACTIVE_LOW=True: ON -> output LOW, OFF -> output HIGH
+ACTIVE_LOW = {
+    "fan1": True,
+    "fan2": True,
+    "pump": True,
+    "light": True,
 }
 
 # Trạng thái hiện tại của các thiết bị
@@ -31,12 +40,13 @@ def init_gpio():
     try:
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
-        
+
         for device, pin in DEVICES.items():
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)  # Tắt tất cả ban đầu
-            _device_states[device] = False
-            
+            # OFF mặc định theo cực tính ACTIVE_LOW
+            off_level = GPIO.HIGH if ACTIVE_LOW.get(device, False) else GPIO.LOW
+            GPIO.setup(pin, GPIO.OUT, initial=off_level)
+            _device_states[device] = False  # OFF
+
         print("[GPIO] Initialized successfully:", list(DEVICES.keys()))
     except Exception as e:
         print(f"[GPIO] Init error: {e}")
@@ -46,6 +56,13 @@ def cleanup_gpio():
     if GPIO is None:
         return
     try:
+        # Đưa tất cả về OFF trước khi nhả GPIO để tránh relay kêu tạch
+        for device, pin in DEVICES.items():
+            try:
+                off_level = GPIO.HIGH if ACTIVE_LOW.get(device, False) else GPIO.LOW
+                GPIO.output(pin, off_level)
+            except Exception:
+                pass
         GPIO.cleanup()
         print("[GPIO] Cleaned up")
     except Exception as e:
@@ -74,10 +91,22 @@ def set_device(device_name: str, state: bool):
         return True
     
     try:
-        GPIO.output(pin, GPIO.HIGH if state else GPIO.LOW)
+        # Tính mức tín hiệu theo cực tính
+        if ACTIVE_LOW.get(device_name, False):
+            # Relay active-low: ON -> LOW, OFF -> HIGH
+            level = GPIO.LOW if state else GPIO.HIGH
+        else:
+            # Active-high
+            level = GPIO.HIGH if state else GPIO.LOW
+
+        GPIO.output(pin, level)
         _device_states[device_name] = state
         status = "ON" if state else "OFF"
-        print(f"[GPIO] {device_name} (pin {pin}) -> {status}")
+        try:
+            actual = GPIO.input(pin)
+            print(f"[GPIO] {device_name} (GPIO{pin}) -> {status} (level={actual}, active_low={ACTIVE_LOW.get(device_name, False)})")
+        except Exception:
+            print(f"[GPIO] {device_name} (GPIO{pin}) -> {status}")
         return True
     except Exception as e:
         print(f"[GPIO] Error setting {device_name}: {e}")
