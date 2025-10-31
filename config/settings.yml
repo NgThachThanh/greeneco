@@ -24,7 +24,7 @@ logging:
   output: "logs/all_sensors.csv"   # file tổng hợp
   interval_hz: 1
 
-device_id: "pi-greenco-01"   # tuỳ bạn, để null cũng được
+device_id: "H2-001"   # tuỳ bạn, để null cũng được
 
 export:
   json_path: "outbox/greeneco_snapshot.json"   # file chụp 1 lần
