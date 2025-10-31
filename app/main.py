@@ -313,13 +313,13 @@ def gpio_control_menu(cfg=None):
         ch = input("Chọn: ").strip()
         
         if ch == "1":
-            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            dev = input("Tên thiết bị (fan1/fan2/pump/light) hoặc số (1-4): ").strip()
             gpio.turn_on(dev)
         elif ch == "2":
-            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            dev = input("Tên thiết bị (fan1/fan2/pump/light) hoặc số (1-4): ").strip()
             gpio.turn_off(dev)
         elif ch == "3":
-            dev = input("Tên thiết bị (fan1/fan2/pump/light): ").strip()
+            dev = input("Tên thiết bị (fan1/fan2/pump/light) hoặc số (1-4): ").strip()
             gpio.toggle_device(dev)
         elif ch == "4":
             gpio.turn_all_on()
@@ -343,7 +343,7 @@ def gpio_control_menu(cfg=None):
                 import traceback
                 traceback.print_exc()
         elif ch == "7":
-            dev = input("Thiết bị cần chẩn đoán (fan1/fan2/pump/light): ").strip()
+            dev = input("Thiết bị cần chẩn đoán (fan1/fan2/pump/light) hoặc số (1-4): ").strip()
             try:
                 gpio.diagnose_device(dev)
             except Exception as e:

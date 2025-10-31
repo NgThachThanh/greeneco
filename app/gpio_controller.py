@@ -4,6 +4,7 @@ Module điều khiển các thiết bị qua GPIO (relay/transistor).
 Mỗi thiết bị được map với một GPIO pin cụ thể.
 """
 import time
+from typing import Optional
 try:
     import RPi.GPIO as GPIO
 except ImportError:
@@ -19,6 +20,15 @@ DEVICES = {
     "light": 19   # pin 35 (GPIO19)
 }
 
+# Alias/biệt danh chấp nhận khi người dùng nhập, không phân biệt hoa thường
+# Hỗ trợ số thứ tự 1-4, tiếng Việt cơ bản và biến thể có khoảng trắng
+ALIASES = {
+    "1": "fan1", "fan 1": "fan1", "quat1": "fan1", "quạt1": "fan1", "q1": "fan1",
+    "2": "fan2", "fan 2": "fan2", "quat2": "fan2", "quạt2": "fan2", "q2": "fan2",
+    "3": "pump",  "bom": "pump",  "bơm": "pump",
+    "4": "light", "den": "light", "đèn": "light", "lamp": "light",
+}
+
 # Đa số module relay phổ biến là ACTIVE-LOW: kéo chân IN xuống LOW sẽ kích relay (ON)
 # Với ACTIVE_LOW=True: ON -> output LOW, OFF -> output HIGH
 ACTIVE_LOW = {
@@ -30,6 +40,28 @@ ACTIVE_LOW = {
 
 # Trạng thái hiện tại của các thiết bị
 _device_states = {dev: False for dev in DEVICES}
+
+def normalize_device_name(name: str) -> Optional[str]:
+    """Chuẩn hóa tên thiết bị về key trong DEVICES.
+
+    Chấp nhận: hoa/thường, có khoảng trắng, alias và số thứ tự.
+    Trả về None nếu không tìm thấy.
+    """
+    if not isinstance(name, str):
+        return None
+    key = name.strip().lower()
+    if key in DEVICES:
+        return key
+    # bỏ khoảng trắng để bắt các biến thể như "fan 1"
+    key_nospace = key.replace(" ", "")
+    if key_nospace in DEVICES:
+        return key_nospace
+    # alias trực tiếp
+    if key in ALIASES:
+        return ALIASES[key]
+    if key_nospace in ALIASES:
+        return ALIASES[key_nospace]
+    return None
 
 def init_gpio():
     """Khởi tạo GPIO mode và setup các pin output."""
@@ -79,10 +111,11 @@ def set_device(device_name: str, state: bool):
     Returns:
         bool: True nếu thành công, False nếu lỗi
     """
-    if device_name not in DEVICES:
-        print(f"[GPIO] Device '{device_name}' not found. Available: {list(DEVICES.keys())}")
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        print(f"[GPIO] Device '{device_name}' không hợp lệ. Hợp lệ: {list(DEVICES.keys())}")
         return False
-    
+    device_name = resolved
     pin = DEVICES[device_name]
     
     if GPIO is None:
@@ -91,6 +124,12 @@ def set_device(device_name: str, state: bool):
         return True
     
     try:
+        # Đảm bảo cấu hình pin là OUTPUT (phòng khi bị tiến trình khác thay đổi)
+        try:
+            GPIO.setup(pin, GPIO.OUT)
+        except Exception:
+            pass
+
         # Tính mức tín hiệu theo cực tính
         if ACTIVE_LOW.get(device_name, False):
             # Relay active-low: ON -> LOW, OFF -> HIGH
@@ -100,6 +139,11 @@ def set_device(device_name: str, state: bool):
             level = GPIO.HIGH if state else GPIO.LOW
 
         GPIO.output(pin, level)
+        # nhỏ giọt thời gian ngắn để phần cứng kịp đáp ứng trước khi đọc lại
+        try:
+            time.sleep(0.02)
+        except Exception:
+            pass
         _device_states[device_name] = state
         status = "ON" if state else "OFF"
         try:
@@ -122,7 +166,10 @@ def get_device_state(device_name: str) -> bool:
     Returns:
         bool: True nếu đang ON, False nếu OFF hoặc không tồn tại
     """
-    return _device_states.get(device_name, False)
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        return False
+    return _device_states.get(resolved, False)
 
 def get_all_states() -> dict:
     """
@@ -153,12 +200,13 @@ def diagnose_device(device_name: str, cycles: int = 2, delay: float = 0.5):
     - Ghi HIGH/LOW trực tiếp và đọc lại mức GPIO
     - Thử ON/OFF theo logic set_device
     """
-    if device_name not in DEVICES:
-        print(f"[GPIO] Device '{device_name}' not found. Available: {list(DEVICES.keys())}")
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        print(f"[GPIO] Device '{device_name}' không hợp lệ. Hợp lệ: {list(DEVICES.keys())}")
         return False
 
-    pin = DEVICES[device_name]
-    al = ACTIVE_LOW.get(device_name, False)
+    pin = DEVICES[resolved]
+    al = ACTIVE_LOW.get(resolved, False)
     print(f"[GPIO DIAG] {device_name}: GPIO{pin}, active_low={al}")
 
     if GPIO is None:
@@ -185,12 +233,12 @@ def diagnose_device(device_name: str, cycles: int = 2, delay: float = 0.5):
             print(f"  Cycle {i+1}: direct LOW  -> level={lv_l}")
 
             # Theo logic thiết bị
-            set_device(device_name, True)
+            set_device(resolved, True)
             time.sleep(delay)
             lv_on = GPIO.input(pin)
             print(f"  Cycle {i+1}: logic  ON   -> level={lv_on}")
 
-            set_device(device_name, False)
+            set_device(resolved, False)
             time.sleep(delay)
             lv_off = GPIO.input(pin)
             print(f"  Cycle {i+1}: logic  OFF  -> level={lv_off}")
