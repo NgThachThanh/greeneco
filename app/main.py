@@ -2,7 +2,6 @@
 import time, csv, os, sys, json
 from datetime import datetime
 from app.config import load_config
-from app.camera_preview import run as run_cam
 from app.sen0501_i2c import Sen0501
 from app.sen0220_uart import Sen0220
 from app.es_soil7 import ESSoil7
@@ -290,6 +289,11 @@ def gpio_control_menu(cfg=None):
     if not _gpio_initialized:
         gpio.init_gpio()
         _gpio_initialized = True
+        # In thông tin backend để người dùng biết đang dùng RPi.GPIO hay mock
+        try:
+            print(f"[GPIO] Backend đang dùng: {gpio.backend_info()}")
+        except Exception:
+            pass
     
     while True:
         states = gpio.get_all_states()
@@ -297,21 +301,21 @@ def gpio_control_menu(cfg=None):
         print("Trạng thái hiện tại:")
         for dev, state in states.items():
             pin = gpio.DEVICES[dev]
-            status = "ON" if state else "OFF"
+            status = gpio.get_display_status(dev)
             print(f"  {dev:8} (pin {pin:2}) -> {status}")
-        
+
         print("\nTùy chọn:")
         print("1) Bật thiết bị")
         print("2) Tắt thiết bị")
         print("3) Đảo trạng thái (toggle)")
         print("4) Bật tất cả")
         print("5) Tắt tất cả")
-        print("6) Gửi trạng thái lên server")
-        print("7) Chẩn đoán 1 thiết bị (test pin)")
-        print("8) Thoát menu GPIO")
-        
+    print("6) Gửi trạng thái lên server")
+    print("7) Chẩn đoán 1 thiết bị (test pin)")
+    print("8) Thoát menu GPIO")
+
         ch = input("Chọn: ").strip()
-        
+
         if ch == "1":
             dev = input("Tên thiết bị (fan1/fan2/pump/light) hoặc số (1-4): ").strip()
             gpio.turn_on(dev)
@@ -330,10 +334,10 @@ def gpio_control_menu(cfg=None):
                 # Gửi kèm với sensor data
                 from app.json_export import collect_all
                 from app.uploader import post_dict
-                
+
                 print("Đang đọc sensors và GPIO...")
                 data = collect_all(cfg, include_gpio=True)
-                
+
                 print("Đang gửi lên server...")
                 code, text = post_dict(data)
                 print(f"[Upload] POST OK: {code}")
@@ -417,6 +421,8 @@ def main_menu():
         choice = input("Chọn: ").strip()
         if   choice == "1":
             try:
+                # Import chậm để tránh vướng môi trường thiếu picamera2/cv2 khi không dùng camera
+                from app.camera_preview import run as run_cam
                 cam_cfg = cfg.get("camera", {})
                 res = tuple(cam_cfg.get("resolution", (1280, 720)))
                 run_cam(res)

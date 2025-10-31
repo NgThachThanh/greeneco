@@ -66,7 +66,7 @@ def normalize_device_name(name: str) -> Optional[str]:
 def init_gpio():
     """Khởi tạo GPIO mode và setup các pin output."""
     if GPIO is None:
-        print("[GPIO] Mock mode - skipping GPIO setup")
+        print("[GPIO] Backend: MOCK (RPi.GPIO không sẵn có) - bỏ qua setup phần cứng")
         return
     
     try:
@@ -78,10 +78,24 @@ def init_gpio():
             off_level = GPIO.HIGH if ACTIVE_LOW.get(device, False) else GPIO.LOW
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
             _device_states[device] = False  # OFF
-
+        try:
+            ver = getattr(GPIO, "__version__", "unknown")
+        except Exception:
+            ver = "unknown"
+        print(f"[GPIO] Backend: RPi.GPIO v{ver}")
         print("[GPIO] Initialized successfully:", list(DEVICES.keys()))
     except Exception as e:
         print(f"[GPIO] Init error: {e}")
+
+def backend_info() -> str:
+    """Trả về thông tin backend GPIO hiện dùng."""
+    if GPIO is None:
+        return "MOCK"
+    try:
+        ver = getattr(GPIO, "__version__", "unknown")
+    except Exception:
+        ver = "unknown"
+    return f"RPi.GPIO v{ver}"
 
 def cleanup_gpio():
     """Dọn dẹp GPIO khi thoát chương trình."""
@@ -179,6 +193,82 @@ def get_all_states() -> dict:
         dict: {device_name: bool}
     """
     return _device_states.copy()
+
+def is_on(device_name: str) -> bool:
+    """Trả về True nếu thiết bị đang ON (dựa trên mức GPIO thực nếu có)."""
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        return False
+    if GPIO is None:
+        return bool(_device_states.get(resolved, False))
+    try:
+        pin = DEVICES[resolved]
+        level = GPIO.input(pin)
+        if ACTIVE_LOW.get(resolved, False):
+            return level == GPIO.LOW
+        else:
+            return level == GPIO.HIGH
+    except Exception:
+        return bool(_device_states.get(resolved, False))
+
+def get_display_status(device_name: str) -> str:
+    """Chuẩn hóa nhãn hiển thị "ON"/"OFF" theo trạng thái thực tế phần cứng.
+
+    - Nếu đọc được GPIO: suy ra ON/OFF theo cực tính ACTIVE_LOW
+    - Nếu không: fallback về trạng thái logic đã lưu
+    """
+    return "ON" if is_on(device_name) else "OFF"
+
+def get_polarity(device_name: str) -> Optional[bool]:
+    """Lấy cực tính hiện tại: True=active-low, False=active-high."""
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        return None
+    return bool(ACTIVE_LOW.get(resolved, False))
+
+def _apply_output_for_state(device_name: str):
+    """Ghi lại mức pin theo trạng thái logic hiện tại và cực tính mới."""
+    if GPIO is None:
+        return
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        return
+    pin = DEVICES[resolved]
+    state = _device_states.get(resolved, False)
+    try:
+        GPIO.setup(pin, GPIO.OUT)
+        if ACTIVE_LOW.get(resolved, False):
+            level = GPIO.LOW if state else GPIO.HIGH
+        else:
+            level = GPIO.HIGH if state else GPIO.LOW
+        GPIO.output(pin, level)
+    except Exception:
+        pass
+
+def set_polarity(device_name: str, active_low: bool) -> bool:
+    """Đặt cực tính cho 1 thiết bị và áp mức pin theo trạng thái hiện tại.
+
+    active_low=True: ON -> LOW, OFF -> HIGH
+    active_low=False: ON -> HIGH, OFF -> LOW
+    """
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        print(f"[GPIO] Device '{device_name}' không hợp lệ. Hợp lệ: {list(DEVICES.keys())}")
+        return False
+    ACTIVE_LOW[resolved] = bool(active_low)
+    _apply_output_for_state(resolved)
+    mode = "active-low" if active_low else "active-high"
+    print(f"[GPIO] Đã đặt cực tính {resolved}: {mode}")
+    return True
+
+def toggle_polarity(device_name: str) -> bool:
+    """Đảo cực tính active-low/active-high cho 1 thiết bị."""
+    resolved = normalize_device_name(device_name)
+    if not resolved:
+        print(f"[GPIO] Device '{device_name}' không hợp lệ. Hợp lệ: {list(DEVICES.keys())}")
+        return False
+    cur = bool(ACTIVE_LOW.get(resolved, False))
+    return set_polarity(resolved, not cur)
 
 def turn_on(device_name: str):
     """Bật thiết bị (shortcut)."""
