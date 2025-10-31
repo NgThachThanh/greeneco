@@ -310,9 +310,9 @@ def gpio_control_menu(cfg=None):
         print("3) Đảo trạng thái (toggle)")
         print("4) Bật tất cả")
         print("5) Tắt tất cả")
-    print("6) Gửi trạng thái lên server")
-    print("7) Chẩn đoán 1 thiết bị (test pin)")
-    print("8) Thoát menu GPIO")
+        print("6) Gửi trạng thái lên server")
+        print("7) Chẩn đoán 1 thiết bị (test pin)")
+        print("8) Thoát menu GPIO")
 
         ch = input("Chọn: ").strip()
 
