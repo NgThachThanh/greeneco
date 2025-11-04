@@ -2,7 +2,8 @@
 import time, csv, os, sys, json
 from datetime import datetime
 from app.config import load_config
-from app.sen0501_i2c import Sen0501
+from app.sen0501_i2c import Sen0501 as Sen0501_I2C
+from app.sen0501_uart import Sen0501UART as Sen0501_UART
 from app.sen0220_uart import Sen0220
 from app.es_soil7 import ESSoil7
 from app.dashboard import run as run_dashboard
@@ -22,8 +23,20 @@ IMAGE_UPLOAD_CFG = {
 # GPIO control sẽ được import lazy để tránh lỗi trên máy không có RPi.GPIO
 _gpio_initialized = False
 
+def _create_sen0501(cfg):
+    """Helper để tạo SEN0501 object theo mode (i2c hoặc uart)."""
+    mode = cfg["sen0501"].get("mode", "i2c").lower()
+    if mode == "uart":
+        port = cfg["sen0501"].get("port", "/dev/ttyAMA1")
+        baud = cfg["sen0501"].get("baud", 9600)
+        return Sen0501_UART(port=port, baud=baud)
+    else:
+        bus = cfg["sen0501"]["i2c_bus"]
+        addr = int(cfg["sen0501"]["address"])
+        return Sen0501_I2C(bus=bus, addr=addr)
+
 def read_once_0501(cfg):
-    s = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
+    s = _create_sen0501(cfg)
     print(s.read())
 
 def stream_co2(cfg):
@@ -99,7 +112,7 @@ def log_soil(cfg):
             time.sleep(dt)
 
 def combined_log_all(cfg):
-    s1 = Sen0501(bus=cfg["sen0501"]["i2c_bus"], addr=int(cfg["sen0501"]["address"]))
+    s1 = _create_sen0501(cfg)
     s2 = Sen0220(port=cfg["sen0220"]["port"], baud=cfg["sen0220"]["baud"])
     soil = ESSoil7(port=cfg["soil7"]["port"], slave=cfg["soil7"]["slave"],
                    baud=cfg["soil7"]["baud"], timeout=cfg["soil7"]["timeout"],

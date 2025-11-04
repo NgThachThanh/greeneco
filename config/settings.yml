@@ -2,8 +2,13 @@ camera:
   resolution: [960, 540]
 
 sen0501:
+  mode: "uart"              # "i2c" hoặc "uart"
+  # I2C settings (khi mode: "i2c")
   i2c_bus: 1
   address: 0x22
+  # UART settings (khi mode: "uart")
+  port: "/dev/ttyAMA1"      # UART5 - GPIO 12/13 (pin 32/33)
+  baud: 9600
   read_hz: 1
 
 sen0220:

@@ -44,10 +44,17 @@ def control():
     """
     POST: Điều khiển GPIO theo body:
     
-    Body mẫu:
+    Format mới (khuyến nghị):
     {
-        "device": "fan1",     // hoặc "fan2", "pump", "light", "1", "2", "3", "4"
-        "action": "on"        // "on", "off", "toggle"
+        "deviceId": "H2-RASPI-01",
+        "component": "pump",    // "fan1", "fan2", "pump", "light"
+        "state": "on"           // "on", "off", "toggle"
+    }
+    
+    Format cũ (vẫn hỗ trợ):
+    {
+        "device": "fan1",
+        "action": "on"
     }
     
     Hoặc điều khiển nhiều thiết bị:
@@ -70,8 +77,56 @@ def control():
     results = []
     
     try:
+        # ===== FORMAT MỚI: deviceId + component + state =====
+        if "component" in data and "state" in data:
+            device_id = data.get("deviceId", "unknown")
+            component = data.get("component")
+            state = data.get("state", "").lower()
+            
+            if not component or not state:
+                return jsonify({
+                    "status": "FAILED",
+                    "error": "Missing component or state"
+                }), 400
+            
+            # Normalize state: "on"/"off"/"toggle"
+            if state not in ["on", "off", "toggle"]:
+                return jsonify({
+                    "status": "FAILED",
+                    "error": f"Invalid state: {state}. Use 'on', 'off', or 'toggle'"
+                }), 400
+            
+            success = False
+            if state == "on":
+                success = gpio.turn_on(component)
+            elif state == "off":
+                success = gpio.turn_off(component)
+            elif state == "toggle":
+                success = gpio.toggle_device(component)
+            
+            if not success:
+                return jsonify({
+                    "status": "FAILED",
+                    "deviceId": device_id,
+                    "component": component,
+                    "error": f"Failed to control '{component}'. Valid components: {list(gpio.DEVICES.keys())}"
+                }), 400
+            
+            # Lấy trạng thái hiện tại sau khi điều khiển
+            current_state = gpio.get_device_state(component)
+            
+            return jsonify({
+                "status": "OK",
+                "deviceId": device_id,
+                "component": component,
+                "state": "on" if current_state else "off",
+                "pin": gpio.DEVICES.get(gpio.normalize_device_name(component)),
+                "message": f"{component} turned {state}"
+            }), 200
+        
+        # ===== FORMAT CŨ: Giữ lại để tương thích ngược =====
         # Trường hợp 1: Điều khiển tất cả
-        if "action" in data and data["action"] in ["all_on", "all_off"]:
+        elif "action" in data and data["action"] in ["all_on", "all_off"]:
             if data["action"] == "all_on":
                 gpio.turn_all_on()
                 results.append({"action": "all_on", "status": "OK"})
@@ -105,8 +160,8 @@ def control():
                     "action": action,
                     "status": "OK" if success else "FAILED"
                 })
-        
-        # Trường hợp 3: Điều khiển 1 thiết bị
+
+        # Trường hợp 3: Điều khiển một thiết bị (format cũ)
         elif "device" in data:
             device = data.get("device")
             action = data.get("action", "").lower()
@@ -131,7 +186,9 @@ def control():
             })
         
         else:
-            return jsonify({"error": "Invalid request body"}), 400
+            return jsonify({
+                "error": "Invalid request body. Use format: {\"deviceId\": \"...\", \"component\": \"pump\", \"state\": \"on\"}"
+            }), 400
         
         # Trả về trạng thái mới sau khi điều khiển
         states = gpio.get_all_states()
